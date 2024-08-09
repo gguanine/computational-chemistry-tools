@@ -1,0 +1,8 @@
+__pycache__/
+freq/
+opt/
+energy/
+
+opt_to_energy.py
+opt_to_freq.py
+smiles_for_optimize.py
