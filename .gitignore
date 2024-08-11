@@ -2,6 +2,7 @@ __pycache__/
 freq/
 opt/
 energy/
+ShermoOutput/
 
 opt_to_energy.py
 opt_to_freq.py

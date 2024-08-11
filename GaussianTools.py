@@ -78,21 +78,16 @@ def MolForDft_Log(filename:str, name_ending:str="-out", allow_imag:bool = False)
     # When allow_imag is False, imaginary frequency is not allowed
 
     name = os.path.splitext(os.path.basename(filename))[0] + "_" + name_ending
-
     print(f"\n\nNow reading molecule {name} in {filename}")
-
-    # Check if the Gaussian terminate nomally
-    with open(filename, "r") as f:
-        lines = f.readlines()
-        for line in reversed(lines):
-            if "Error termination" in line:
-                print("Error termination! Gaussian did not end normally.")
-                return None
-            elif "Normal termination" in line:
-                break
 
     data = cclib.io.ccopen(filename).parse()
 
+    # Check if the Gaussian terminate nomally
+    if not data.metadata["success"]:
+        print("Error termination! Gaussian did not end normally.")
+        return None
+
+    # Check imaginary frequency
     try:
         if data.vibfreqs[0] < 0: # freq calculation may not perform
             print("Imaginary frequency is presented")
