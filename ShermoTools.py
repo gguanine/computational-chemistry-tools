@@ -301,7 +301,7 @@ def MethodPraser(method:str):
 
 class GaussianOutput():
     def __init__(self, filename:str) -> None:
-        print(f"Now reading {filename}")
+        print(f"\tNow reading {filename}")
         data = cclib.io.ccopen(filename).parse()
 
         # Check if the Gaussian terminate nomally
@@ -320,16 +320,16 @@ class GaussianOutput():
 
         # get energy
         if "ccenergies" in dir(data):
-            self.energy = data.ccenergies[-1]
+            self.energy = data.ccenergies[-1] / 27.2114 # convert eV to Hartree
         elif "mpenergies" in dir(data):
-            self.energy = data.mpenergies[-1]
+            self.energy = data.mpenergies[-1] / 27.2114
         elif "scfenergies" in dir(data):
-            self.energy = data.scfenergies[-1]
+            self.energy = data.scfenergies[-1] / 27.2114
         else:
             raise AttributeError()
 
-        print(f"Computation was conduct in {self.method}/{self.basis_set} level")
-        print(f"Energy = {self.energy}")   
+        print(f"\tComputation was conduct in {self.method}/{self.basis_set} level")
+        print(f"\tEnergy = {self.energy}")   
 
 class MoleculeSummarize():
     def __init__(self, name) -> None:
@@ -377,7 +377,7 @@ class MoleculeSummarize():
             print("Did not find suitable scaler")
             self.scaler = [1., 1., 1., "No scaler"]
 
-    def runShermo(self, output_dir):
+    def runShermo(self, output_dir) -> int:
         Shermo_params = [shermo_path, self.freq_log,
                       "-E", str(self.energy),
                       "-sclZPE", str(self.scaler[0]),
@@ -386,15 +386,18 @@ class MoleculeSummarize():
                       ]
         result = subprocess.run(Shermo_params, capture_output=True, text=True)
 
+        output_file = os.path.join(output_dir, f"{self.name}.txt")
         if result.returncode == 0:
             print(f"Shermo completed successfully for molecule {self.name}.")
-            output_file = os.path.join(output_dir, f"{self.name}.txt")
             self.__Shermo_parser(result.stdout)
             with open(output_file, 'w+') as f:
                 f.write(result.stdout)
+            return 0
         else:
             print(f"Shermo failed for molecule {self.name}.")
-            print(result.stderr)
+            with open(output_file, 'w+') as f:
+                f.write(result.stderr)
+            return 1
 
 
 
@@ -443,15 +446,16 @@ def ProjectSummarize(cwd=os.getcwd()):
             if os.path.basename(freq_file).split("_")[0] == name:
                 mol.getFreq(freq_file)
                 found_in_freq_dir = True
+                if mol.runShermo(output_dir=shermo_output_dir) == 0:
+                    mols.append(mol)
 
         # some tasks run freq calculation during opt
         if not found_in_freq_dir:
             for opt_file in opt_files:
-                if os.path.basename(opt_file).split("_")[0] == name:
+                if os.path.basename(opt_file).split(".")[0] == name:
                     mol.getFreq(opt_file)
-
-        mol.runShermo(output_dir=shermo_output_dir)
-        mols.append(mol)
+                    if mol.runShermo(output_dir=shermo_output_dir) == 0:
+                        mols.append(mol)
 
     with open(os.path.join(shermo_output_dir, "summay.csv"), "w+", newline='') as f:
         writer = csv.writer(f)
