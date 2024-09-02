@@ -442,12 +442,15 @@ def ProjectSummarize(cwd=os.getcwd()):
         print("Getting frequency calculation")
         # try looking for freq computation in freq dir
         found_in_freq_dir = False
-        for freq_file in freq_files:
-            if os.path.basename(freq_file).split("_")[0] == name:
-                mol.getFreq(freq_file)
-                found_in_freq_dir = True
-                if mol.runShermo(output_dir=shermo_output_dir) == 0:
-                    mols.append(mol)
+        try:
+            for freq_file in freq_files:
+                if os.path.basename(freq_file).split("_")[0] == name:
+                    mol.getFreq(freq_file)
+                    found_in_freq_dir = True
+                    if mol.runShermo(output_dir=shermo_output_dir) == 0: # if Shermo terminate successfullly
+                        mols.append(mol)
+        except UnboundLocalError:
+            print("No freq dir")
 
         # some tasks run freq calculation during opt
         if not found_in_freq_dir:
@@ -456,7 +459,7 @@ def ProjectSummarize(cwd=os.getcwd()):
                     mol.getFreq(opt_file)
                     if mol.runShermo(output_dir=shermo_output_dir) == 0:
                         mols.append(mol)
-
+    # summarize in a .csv file
     with open(os.path.join(shermo_output_dir, "summay.csv"), "w+", newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["Name",
