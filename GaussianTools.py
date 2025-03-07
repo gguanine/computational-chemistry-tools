@@ -8,7 +8,7 @@ GAUSSIAN_NPROCS = 12
 GAUSSIAN_MEM = "16GB"
 GAUSSIAN_CHECK = True
 
-at_num_symbol = \
+atom_num_to_symbol = \
     {1: 'H', 2: 'He',
      3: 'Li', 4: 'Be', 5: 'B', 6: 'C', 7: 'N', 8: 'O', 9: 'F', 10: 'Ne',
      11: 'Na', 12: 'Mg', 13: 'Al', 14: 'Si', 15: 'P', 16: 'S', 17: 'Cl', 18: 'Ar',
@@ -21,7 +21,7 @@ at_num_symbol = \
      58: 'Ce', 59: 'Pr', 60: 'Nd', 61: 'Pm', 62: 'Sm', 63: 'Eu', 64: 'Gd', 65: 'Tb', 66: 'Dy', 67: 'Ho', 68: 'Er',
      69: 'Tm', 70: 'Yb', 71: 'Lu'}
 
-symbol_at_num = \
+symbol_to_atom_num = \
     {'H': 1, 'He':2,
      'Li': 3, 'Be':4, 'B': 5, 'C': 6, 'N': 7, 'O': 8, 'F': 9, 'Ne': 10,
      'Na': 11, 'Mg': 12, 'Al': 13, 'Si': 14, 'P': 15, 'S': 16, 'Cl': 17, 'Ar': 18,
@@ -34,10 +34,17 @@ symbol_at_num = \
      'Ce': 58, 'Pr': 59, 'Nd': 60, 'Pm': 61, 'Sm': 62, 'Eu': 63, 'Gd': 64, 'Tb': 65, 'Dy': 66, 'Ho': 67, 'Er': 68,
      'Tm': 69, 'Yb': 70, 'Lu': 71}
 
-def XYZBlockToCartesian(XYZBlock:str) -> str:
+def xyz_block_to_cartesian(XYZBlock:str) -> str:
     return "\n".join(XYZBlock.splitlines()[2:]) # delete the first two lines of XYZ block to give Cartesian.
 
-def MolForDft_Smiles(smiles:str, name="", charge=None, multiplicity=None) -> Chem.Mol:
+def print_mol_data(mol:Chem.Mol) -> None:
+    # print molecule information
+    print("name =", mol.GetProp("Name"))
+    print("charge =", mol.GetProp("Charge"))
+    print("multiplicity =", mol.GetProp("Multiplicity"))
+    print(mol.GetProp("Cartesian") )   
+
+def molecule_from_smiles(smiles:str, name="", charge=None, multiplicity=None) -> Chem.Mol:
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)
     AllChem.EmbedMolecule(mol, randomSeed=1)
@@ -55,7 +62,6 @@ def MolForDft_Smiles(smiles:str, name="", charge=None, multiplicity=None) -> Che
     # Set molecule charge
     if charge is None:
         charge = Chem.GetFormalCharge(mol)
-    print(f"charge = {charge}")
     mol.SetProp("Charge", str(charge)) 
 
     # Set molecule multiplicity
@@ -63,18 +69,17 @@ def MolForDft_Smiles(smiles:str, name="", charge=None, multiplicity=None) -> Che
         multiplicity = Descriptors.NumRadicalElectrons(mol) + 1
     if multiplicity != 1:
         print("Radical appears to be presented.")
-    print(f"multiplicity = {multiplicity}")
     mol.SetProp("Multiplicity", str(multiplicity)) 
 
     # Set Cartesian
-    cartesian = XYZBlockToCartesian(Chem.MolToXYZBlock(mol))
-    print(cartesian)
+    cartesian = xyz_block_to_cartesian(Chem.MolToXYZBlock(mol))
     mol.SetProp("Cartesian", cartesian) 
 
+    print_mol_data(mol)
     print ("*"*50)
     return mol
 
-def MolForDft_Log(filename:str, name_ending:str="-out", allow_imag:bool = False) -> Chem.Mol:
+def molecule_from_log(filename:str, name_ending:str="-out", allow_imag:bool = False) -> Chem.Mol:
     # When allow_imag is False, imaginary frequency is not allowed
 
     name = os.path.splitext(os.path.basename(filename))[0] + "_" + name_ending
@@ -99,24 +104,50 @@ def MolForDft_Log(filename:str, name_ending:str="-out", allow_imag:bool = False)
 
 
     XYZBlock = str(data.natom) + "\n\n"
-    atomlabel = [at_num_symbol[i] for i in data.atomnos]
+    atomlabel = [atom_num_to_symbol[i] for i in data.atomnos]
     coords = ["   ".join(map("{:.7f}".format, row)) for row in data.atomcoords[-1]]
     atomNcoords = ["   ".join(row) for row in zip(atomlabel, coords)]
     cartesian = "\n".join(atomNcoords)
     XYZBlock += cartesian
-
-    print(XYZBlock)
-    print("charge = ", data.charge)
-    print("multiplicity = ", data.mult)
 
     mol = Chem.MolFromXYZBlock(XYZBlock)
     mol.SetProp("Name", name)
     mol.SetProp("Charge", str(data.charge))
     mol.SetProp("Multiplicity", str(data.mult))
     mol.SetProp("Cartesian", cartesian) 
+    print_mol_data(mol)
     print("Successfully load the molecule.")
 
     return mol
+
+def molecule_from_gjf(filename:str, output_ending_with:str="-out") -> Chem.Mol:
+    # a parser to read molecule from gaussian input file
+    with open(filename, 'r') as f:
+        text = f.read().strip()
+        sections = text.split("\n\n")
+        
+        mol_name = sections[1].strip()
+        print("Now reading", mol_name)
+        
+        section2_lines = sections[2].splitlines()
+        charge_multiplicity = section2_lines[0].split()
+        charge = int(charge_multiplicity[0])
+        multiplicity = int(charge_multiplicity[1])
+        
+        natom = len(section2_lines[1:])
+        cartesian = "\n".join(section2_lines[1:])
+        XYZBlock = str(natom) + '\n\n' + cartesian
+
+        mol = Chem.MolFromXYZBlock(XYZBlock)
+        mol.SetProp("Name", mol_name)
+        mol.SetProp("Charge", str(charge))
+        mol.SetProp("Multiplicity", str(multiplicity))
+        mol.SetProp("Cartesian", cartesian) 
+        
+        print_mol_data(mol)
+        print("Successfully load the molecule.")           
+        
+        return mol
 
 class GaussianInputFile():
     def __init__(self, file_directory:str=None, nprocs:int=GAUSSIAN_NPROCS, mem:str=GAUSSIAN_MEM, check:bool=GAUSSIAN_CHECK):
@@ -134,7 +165,7 @@ class GaussianInputFile():
             print("Saving output files in directory", self.file_path)
             
     
-    def MolToGjf(self, mol:Chem.Mol, cmd:str, cmd2:str=""):
+    def molecule_to_gjf(self, mol:Chem.Mol, cmd:str, cmd2:str=""):
         if mol is None:
             print("**********Fail to load this molecule**********")
             return
@@ -159,7 +190,7 @@ class GaussianInputFile():
             f.write("\n" + cmd2 + "\n\n")
         print("done!\n" + "-"*100 + "\n")
 
-def DirLogsToGjf(input_dir:str, output_dir:str, cmd:str, name_ending=None):
+def dir_logs_to_gjf(input_dir:str, output_dir:str, cmd:str, name_ending=None):
     # finding  Gaussian output .log files in input direactory, convert them into gjf using command cmd.
     if name_ending is None:
         name_ending = input_dir
@@ -173,11 +204,29 @@ def DirLogsToGjf(input_dir:str, output_dir:str, cmd:str, name_ending=None):
                 print("Found:", full_file_dir)
                 log_files.append(full_file_dir)
                 
-    mols = [MolForDft_Log(f, name_ending=name_ending) for f in log_files]            
+    mols = [molecule_from_log(f, name_ending=name_ending) for f in log_files]            
                 
     g_en = GaussianInputFile(file_directory=output_dir)
     for mol in mols:
-        g_en.MolToGjf(mol, cmd=cmd)
+        g_en.molecule_to_gjf(mol, cmd=cmd)
+
+def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str):
+    # finding  Gaussian input .gjf files in input direactory, convert them into gjf using command cmd.
+    
+    cwd = os.getcwd()
+    original_files = []
+    for root, dirs, files in os.walk(os.path.join(cwd, input_dir)):
+        for file in files:
+            if file.endswith('.gjf'):
+                full_file_dir = os.path.join(root, file)
+                print("Found:", full_file_dir)
+                original_files.append(full_file_dir)
+                
+    mols = [molecule_from_gjf(f) for f in original_files]            
+                
+    g_en = GaussianInputFile(file_directory=output_dir)
+    for mol in mols:
+        g_en.molecule_to_gjf(mol, cmd=cmd)
 
 if __name__ == "__main__":
     pass

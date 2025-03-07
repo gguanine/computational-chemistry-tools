@@ -1,8 +1,8 @@
 #!/bin/bash
 #PBS -P gaussian
 #PBS -m abe
-#PBS -q parallel12
-#PBS -l select=1:ncpus=12:mem=16GB
+#PBS -q parallel
+#PBS -l select=1:ncpus=24:mem=48GB
 #PBS -l walltime=720:00:00
 
 dir_opt="opt" # Directory for .gjf files for optimizations
