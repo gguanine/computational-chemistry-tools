@@ -1,82 +1,23 @@
+from .config import HPC_NPROCS, HPC_MEM, GAUSSIAN_CHECK
+from . import utils
+
+import periodictable
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit.Chem import Descriptors
 import cclib
+
 import os
+  
 
-GAUSSIAN_NPROCS = 12
-GAUSSIAN_MEM = "16GB"
-GAUSSIAN_CHECK = True
-
-atom_num_to_symbol = \
-    {1: 'H', 2: 'He',
-     3: 'Li', 4: 'Be', 5: 'B', 6: 'C', 7: 'N', 8: 'O', 9: 'F', 10: 'Ne',
-     11: 'Na', 12: 'Mg', 13: 'Al', 14: 'Si', 15: 'P', 16: 'S', 17: 'Cl', 18: 'Ar',
-     19: 'K', 20: 'Ca', 21: 'Sc', 22: 'Ti', 23: 'V', 24: 'Cr', 25: 'Mn', 26: 'Fe', 27: 'Co', 28: 'Ni', 29: 'Cu',
-     30: 'Zn', 31: 'Ga', 32: 'Ge', 33: 'As', 34: 'Se', 35: 'Br', 36: 'Kr',
-     37: 'Rb', 38: 'Sr', 39: 'Y', 40: 'Zr', 41: 'Nb', 42: 'Mo', 43: 'Tc', 44: 'Ru', 45: 'Rh', 46: 'Pd', 47: 'Ag',
-     48: 'Cd', 49: 'In', 50: 'Sn', 51: 'Sb', 52: 'Te', 53: 'I', 54: 'Xe',
-     55: 'Cs', 56: 'Ba', 57: 'La', 72: 'Hf', 73: 'Ta', 74: 'W', 75: 'Re', 76: 'Os', 77: 'Ir', 78: 'Pt', 79: 'Au',
-     80: 'Hg', 81: 'Tl', 82: 'Pb', 83: 'Bi', 84: 'Po', 85: 'At', 86: 'Rn',
-     58: 'Ce', 59: 'Pr', 60: 'Nd', 61: 'Pm', 62: 'Sm', 63: 'Eu', 64: 'Gd', 65: 'Tb', 66: 'Dy', 67: 'Ho', 68: 'Er',
-     69: 'Tm', 70: 'Yb', 71: 'Lu'}
-
-symbol_to_atom_num = \
-    {'H': 1, 'He':2,
-     'Li': 3, 'Be':4, 'B': 5, 'C': 6, 'N': 7, 'O': 8, 'F': 9, 'Ne': 10,
-     'Na': 11, 'Mg': 12, 'Al': 13, 'Si': 14, 'P': 15, 'S': 16, 'Cl': 17, 'Ar': 18,
-     'K': 19, 'Ca': 20, 'Sc': 21, 'Ti': 22, 'V': 23, 'Cr': 24, 'Mn': 25, 'Fe': 26, 'Co': 27, 'Ni': 28, 'Cu': 29,
-     'Zn': 30, 'Ga': 31, 'Ge': 32, 'As': 33, 'Se': 34, 'Br': 35, 'Kr': 36,
-     'Rb': 37, 'Sr': 38, 'Y': 39, 'Zr': 40, 'Nb': 41, 'Mo': 42, 'Tc': 43, 'Ru': 44, 'Rh': 45, 'Pd': 46, 'Ag': 47,
-     'Cd': 48, 'In': 49, 'Sn': 50, 'Sb': 51, 'Te': 52, 'I': 53, 'Xe': 54,
-     'Cs': 55, 'Ba': 56, 'La': 57, 'Hf': 72, 'Ta': 73, 'W': 74, 'Re': 75, 'Os': 76, 'Ir': 77, 'Pt': 78, 'Au': 79,
-     'Hg': 80, 'Tl': 81, 'Pb': 82, 'Bi': 83, 'Po': 84, 'At': 85, 'Rn': 86,
-     'Ce': 58, 'Pr': 59, 'Nd': 60, 'Pm': 61, 'Sm': 62, 'Eu': 63, 'Gd': 64, 'Tb': 65, 'Dy': 66, 'Ho': 67, 'Er': 68,
-     'Tm': 69, 'Yb': 70, 'Lu': 71}
-
-def xyz_block_to_cartesian(XYZBlock:str) -> str:
-    return "\n".join(XYZBlock.splitlines()[2:]) # delete the first two lines of XYZ block to give Cartesian.
-
-def print_mol_data(mol:Chem.Mol) -> None:
-    # print molecule information
-    print("name =", mol.GetProp("Name"))
-    print("charge =", mol.GetProp("Charge"))
-    print("multiplicity =", mol.GetProp("Multiplicity"))
-    print(mol.GetProp("Cartesian") )   
-
-def molecule_from_smiles(smiles:str, name="", charge=None, multiplicity=None) -> Chem.Mol:
+def molecule_from_smiles(smiles:str, name=None, charge=None, multiplicity=None) -> Chem.Mol:
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)
     AllChem.EmbedMolecule(mol, randomSeed=1)
     AllChem.MMFFOptimizeMolecule(mol)
 
-    print ("\n\n", "*"*50, sep="")
-
-    # Set  molecule name
-    if name == "":
-        print("Molecule name is empty. Setting the name as InChI Key")
-        name = Chem.inchi.MolToInchiKey(mol)  
-    print(f"Now reading molecule:\nname = {name}")
-    mol.SetProp("Name", name) 
-
-    # Set molecule charge
-    if charge is None:
-        charge = Chem.GetFormalCharge(mol)
-    mol.SetProp("Charge", str(charge)) 
-
-    # Set molecule multiplicity
-    if multiplicity is None:
-        multiplicity = Descriptors.NumRadicalElectrons(mol) + 1
-    if multiplicity != 1:
-        print("Radical appears to be presented.")
-    mol.SetProp("Multiplicity", str(multiplicity)) 
-
-    # Set Cartesian
-    cartesian = xyz_block_to_cartesian(Chem.MolToXYZBlock(mol))
-    mol.SetProp("Cartesian", cartesian) 
-
-    print_mol_data(mol)
-    print ("*"*50)
+    utils.set_cc_props(mol, name, charge, multiplicity)
+    utils.print_mol_data(mol)
+    
     return mol
 
 def molecule_from_log(filename:str, name_ending:str="-out", allow_imag:bool = False) -> Chem.Mol:
@@ -104,7 +45,7 @@ def molecule_from_log(filename:str, name_ending:str="-out", allow_imag:bool = Fa
 
 
     XYZBlock = str(data.natom) + "\n\n"
-    atomlabel = [atom_num_to_symbol[i] for i in data.atomnos]
+    atomlabel = [periodictable.elements[i].symbol for i in data.atomnos]
     coords = ["   ".join(map("{:.7f}".format, row)) for row in data.atomcoords[-1]]
     atomNcoords = ["   ".join(row) for row in zip(atomlabel, coords)]
     cartesian = "\n".join(atomNcoords)
@@ -115,12 +56,12 @@ def molecule_from_log(filename:str, name_ending:str="-out", allow_imag:bool = Fa
     mol.SetProp("Charge", str(data.charge))
     mol.SetProp("Multiplicity", str(data.mult))
     mol.SetProp("Cartesian", cartesian) 
-    print_mol_data(mol)
+    #print_mol_data(mol)
     print("Successfully load the molecule.")
 
     return mol
 
-def molecule_from_gjf(filename:str, output_ending_with:str="-out") -> Chem.Mol:
+def molecule_from_gjf(filename:str, output_ending_with:str="-out", MM_opt=False) -> Chem.Mol:
     # a parser to read molecule from gaussian input file
     with open(filename, 'r') as f:
         text = f.read().strip()
@@ -139,18 +80,22 @@ def molecule_from_gjf(filename:str, output_ending_with:str="-out") -> Chem.Mol:
         XYZBlock = str(natom) + '\n\n' + cartesian
 
         mol = Chem.MolFromXYZBlock(XYZBlock)
+        
+        if MM_opt is True:
+            AllChem.MMFFOptimizeMolecule(mol)
+            
         mol.SetProp("Name", mol_name)
         mol.SetProp("Charge", str(charge))
         mol.SetProp("Multiplicity", str(multiplicity))
         mol.SetProp("Cartesian", cartesian) 
         
-        print_mol_data(mol)
+        #print_mol_data(mol)
         print("Successfully load the molecule.")           
         
         return mol
 
 class GaussianInputFile():
-    def __init__(self, file_directory:str=None, nprocs:int=GAUSSIAN_NPROCS, mem:str=GAUSSIAN_MEM, check:bool=GAUSSIAN_CHECK):
+    def __init__(self, file_directory:str=None, nprocs:int=HPC_NPROCS, mem:str=HPC_MEM, check:bool=GAUSSIAN_CHECK):
         self.nprocs = nprocs
         self.mem = mem
         self.check = check
@@ -170,10 +115,10 @@ class GaussianInputFile():
             print("**********Fail to load this molecule**********")
             return
 
-        name = mol.GetProp("Name")
+        name = mol.GetProp("_Name")
         charge = mol.GetProp("Charge")
         multiplicity = mol.GetProp("Multiplicity")
-        cartesian = mol.GetProp("Cartesian")
+        cartesian = utils.get_cartesian(mol)
 
         output_file_name = os.path.join(self.file_path, name + ".gjf")
         print("\n\n" + "-"*100 + "\nNow writing Gaussian input file " + output_file_name)
@@ -210,7 +155,7 @@ def dir_logs_to_gjf(input_dir:str, output_dir:str, cmd:str, name_ending=None):
     for mol in mols:
         g_en.molecule_to_gjf(mol, cmd=cmd)
 
-def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str):
+def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str, MM_opt=False):
     # finding  Gaussian input .gjf files in input direactory, convert them into gjf using command cmd.
     
     cwd = os.getcwd()
@@ -222,7 +167,7 @@ def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str):
                 print("Found:", full_file_dir)
                 original_files.append(full_file_dir)
                 
-    mols = [molecule_from_gjf(f) for f in original_files]            
+    mols = [molecule_from_gjf(f, MM_opt=MM_opt) for f in original_files]            
                 
     g_en = GaussianInputFile(file_directory=output_dir)
     for mol in mols:

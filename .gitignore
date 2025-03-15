@@ -1,9 +1,3 @@
+tests/
+cc_tools.egg-info/
 __pycache__/
-freq/
-opt/
-energy/
-ShermoOutput/
-
-opt_to_energy.py
-opt_to_freq.py
-smiles_for_optimize.py
