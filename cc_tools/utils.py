@@ -13,7 +13,7 @@ def xyz_block_to_cartesian(XYZBlock:str) -> str:
 def get_cartesian(mol:Chem.Mol) -> str:
     return xyz_block_to_cartesian(Chem.MolToXYZBlock(mol))
         
-def set_cc_props(mol:Chem.Mol, name:str=None, charge:int=None, multiplicity:int=None):
+def set_cc_props(mol:Chem.Mol, name:str=None, charge=None, multiplicity=None):
     '''
     Set necessary molecular properties for computation chemistry: name, charge, and multiplicity\n
     Default properties will be calculated from molecule if not provided.
@@ -90,16 +90,8 @@ def molecule_from_log(filename:str, name_suffix:str="out", allow_imag:bool = Fal
 
     return mol        
         
-def pre_optimize(mol:Chem.Mol, method:str = "MMFF94"):
-    if method == "MMFF94":
-        AllChem.MMFFOptimizeMolecule(mol)
 
 
-if __name__ == "__main__":        
-    mol = Chem.MolFromSmiles("CCCCCCCO")
-    set_cc_props(mol)
-
-    print(mol.GetProp("_Name"))
 
 
     
