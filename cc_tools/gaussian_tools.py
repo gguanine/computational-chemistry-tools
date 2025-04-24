@@ -66,8 +66,10 @@ class GaussianInputFile():
         print("\n\n" + "-"*100 + "\nNow writing Gaussian input file " + output_file_name)
         print("with command", cmd)
         with open(output_file_name, "w+") as f:
-            f.write(f"%nprocshared={self.nprocs}\n")
-            f.write(f"%mem={self.mem}\n")
+            if self.nprocs is not None:
+                f.write(f"%nprocshared={self.nprocs}\n")
+            if self.mem is not None:
+                f.write(f"%mem={self.mem}\n")
             if self.check is True:
                 f.write(f"%chk={name}.chk\n")
             f.write(cmd + "\n\n")   

@@ -1,7 +1,7 @@
 
 # HPC configurations
-HPC_NPROCS = 24
-HPC_MEM = "48GB"
+HPC_NPROCS = None
+HPC_MEM = None
 
 # Gaussian confugurations
 GAUSSIAN_CHECK = True
