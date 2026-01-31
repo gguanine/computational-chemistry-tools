@@ -76,10 +76,10 @@ class GaussianInputFile():
             f.write(name + "\n\n")
             f.write(f"{charge} {multiplicity}\n")
             f.write(cartesian) 
-            f.write("\n" + cmd2 + "\n\n")
+            f.write("\n\n" + cmd2 + "\n\n")
         print("done!\n" + "-"*100 + "\n")
 
-def dir_logs_to_gjf(input_dir:str, output_dir:str, cmd:str, name_suffix):
+def dir_logs_to_gjf(input_dir:str, output_dir:str, cmd:str, cmd2:str="", name_suffix:str=""):
     # finding  Gaussian output .log files in input direactory, convert them into gjf using command cmd.
     
     log_files = []
@@ -94,9 +94,9 @@ def dir_logs_to_gjf(input_dir:str, output_dir:str, cmd:str, name_suffix):
                 
     g_en = GaussianInputFile(file_directory=output_dir)
     for mol in mols:
-        g_en.molecule_to_gjf(mol, cmd=cmd)
+        g_en.molecule_to_gjf(mol, cmd=cmd, cmd2=cmd2)
 
-def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str, MM_opt=False):
+def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str, cmd2:str="", MM_opt=False):
     # finding  Gaussian input .gjf files in input direactory, convert them into gjf using command cmd.
     
     original_files = []
@@ -111,7 +111,7 @@ def dir_gjfs_to_gjf(input_dir:str, output_dir:str, cmd:str, MM_opt=False):
                 
     g_en = GaussianInputFile(file_directory=output_dir)
     for mol in mols:
-        g_en.molecule_to_gjf(mol, cmd=cmd)
+        g_en.molecule_to_gjf(mol, cmd=cmd, cmd2=cmd2)
 
 if __name__ == "__main__":
     pass
