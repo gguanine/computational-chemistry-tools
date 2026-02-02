@@ -52,7 +52,7 @@ def molecule_from_smiles(smiles:str, name=None, charge=None, multiplicity=None) 
     
     return mol
 
-def molecule_from_log(filename:str, name_suffix:str="out", allow_imag:bool = False) -> Chem.Mol:
+def molecule_from_log(filename:str, name_suffix:str="out", allow_imag:bool = True) -> Chem.Mol:
     # When allow_imag is False, imaginary frequency is not allowed
 
     name = os.path.splitext(os.path.basename(filename))[0] + "_" + name_suffix
@@ -70,7 +70,7 @@ def molecule_from_log(filename:str, name_suffix:str="out", allow_imag:bool = Fal
         if data.vibfreqs[0] < 0: # freq calculation may not perform
             print("Imaginary frequency is presented")
             if not allow_imag:
-                print("***********Imaginary frequency is not allowed for this computation (by default).***********")
+                print("***********Imaginary frequency is not allowed for this computation.***********")
                 return None
     except:
         pass
