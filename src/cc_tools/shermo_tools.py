@@ -299,6 +299,30 @@ def MethodPraser(method:str):
     # converting CCSD-T to CCSD(T) etc.
     return method
 
+
+def basis_set_praser(basis_set: str) -> str:
+    """
+    Convert Gaussian basis set names to standard publication format.
+    Example:
+        def2svp   -> def2-svp
+        def2tzvp  -> def2-tzvp
+        def2tzvpp -> def2-tzvpp
+    """
+    if not basis_set:
+        return basis_set
+
+    bs = basis_set.lower().strip()
+
+    # Handle def2 basis sets
+    # Gaussian: def2svp, def2tzvp, def2qzvpp, etc.
+    m = re.match(r"(def2)(s|t|q)z(vp{0,2})$", bs)
+    if m:
+        family, zeta, polarization = m.groups()
+        return f"{family}-{zeta}z{polarization}"
+
+    # Already standard or unrecognized → return as-is
+    return bs
+
 class GaussianOutput():
     def __init__(self, filename:str) -> None:
         print(f"\tNow reading {filename}")
@@ -309,7 +333,7 @@ class GaussianOutput():
             print("Error termination! Gaussian did not end normally.")
             return None
 
-        self.basis_set = data.metadata["basis_set"]
+        self.basis_set = basis_set_praser(data.metadata["basis_set"])
 
         if "methods" in data.metadata.keys():
             self.method = data.metadata["methods"][-1]
@@ -362,7 +386,7 @@ class MoleculeSummarize():
         self.energy = data.energy
         self.method_energy = data.method + "/" + data.basis_set
 
-    def getFreq(self, log:str):
+    def getFreqScalar(self, log:str):
         data = GaussianOutput(log)
         self.freq_log = log
         method = data.method.lower()
@@ -401,89 +425,189 @@ class MoleculeSummarize():
 
 
 
-def ProjectSummarize(cwd=os.getcwd()):
-    def getLog(files):
-    # get .log files during os.walk
-        log_files_list = []
-        for file in files:
-            if file.endswith('.log'):
-                full_file_dir = os.path.join(root, file)
-                print("Found:", full_file_dir)
-                log_files_list.append(full_file_dir)
-        return log_files_list
+# def ProjectSummarize(cwd=os.getcwd()):
+#     def getLog(files):
+#     # get .log files during os.walk
+#         log_files_list = []
+#         for file in files:
+#             if file.endswith('.log'):
+#                 full_file_dir = os.path.join(root, file)
+#                 print("Found:", full_file_dir)
+#                 log_files_list.append(full_file_dir)
+#         return log_files_list
     
-    # Looking for energy, opt, and freq directory
-    for root, dirs, files in os.walk(cwd):
-        if os.path.basename(root) == DIR_OPT:
-            print("\nNow looking for optimizations")
-            opt_files = getLog(files)
-        elif os.path.basename(root) == DIR_FREQ:
-            print("\nNow looking for frequency")
-            freq_files = getLog(files)
-        elif os.path.basename(root) == DIR_ENERGY:
-            print("\nNow looking for energy")
-            energy_files = getLog(files)
+#     # Looking for energy, opt, and freq directory
+#     for root, dirs, files in os.walk(cwd):
+#         if os.path.basename(root) == DIR_OPT:
+#             print("\nNow looking for optimizations")
+#             opt_files = getLog(files)
+#         elif os.path.basename(root) == DIR_FREQ:
+#             print("\nNow looking for frequency")
+#             freq_files = getLog(files)
+#         elif os.path.basename(root) == DIR_ENERGY:
+#             print("\nNow looking for energy")
+#             energy_files = getLog(files)
 
-    # Make a dir for Shermo output
-    shermo_output_dir = os.path.join(cwd, "ShermoOutput")
-    if not os.path.exists(shermo_output_dir):
-        os.makedirs(shermo_output_dir)
+#     # Make a dir for Shermo output
+#     shermo_output_dir = os.path.join(cwd, "ShermoOutput")
+#     if not os.path.exists(shermo_output_dir):
+#         os.makedirs(shermo_output_dir)
 
-    # Run Shermo for each molecule found in energy dir
-    mols = []
-    for energy_file in energy_files:
-        name = os.path.basename(energy_file).split("_")[0]
-        print("\nNow reading molecule", name)
+#     # Run Shermo for each molecule found in energy dir
+#     mols = []
+#     for energy_file in energy_files:
+#         name = os.path.basename(energy_file).split("_")[0]
+#         print("\nNow reading molecule", name)
         
+#         mol = MoleculeSummarize(name)
+#         print("Getting precise single point energy calculation:")
+#         mol.getEnergy(energy_file)
+
+#         print("Getting frequency calculation")
+#         # try looking for freq computation in freq dir
+#         found_in_freq_dir = False
+#         try:
+#             for freq_file in freq_files:
+#                 if os.path.basename(freq_file).split("_")[0] == name:
+#                     mol.getFreqScalar(freq_file)
+#                     found_in_freq_dir = True
+#                     if mol.runShermo(output_dir=shermo_output_dir) == 0: # if Shermo terminate successfullly
+#                         mols.append(mol)
+#         except UnboundLocalError:
+#             print("No freq dir")
+
+#         # some tasks run freq calculation during opt
+#         if not found_in_freq_dir:
+#             for opt_file in opt_files:
+#                 if os.path.basename(opt_file).split(".")[0] == name:
+#                     mol.getFreqScalar(opt_file)
+#                     if mol.runShermo(output_dir=shermo_output_dir) == 0:
+#                         mols.append(mol)
+#     # summarize in a .csv file
+#     with open(os.path.join(shermo_output_dir, "summay.csv"), "w+", newline='') as f:
+#         writer = csv.writer(f)
+#         writer.writerow(["Name",
+#                          "Method for freq",
+#                          "Method for energy",
+#                          "Electronic energy (a.u.)",
+#                          "Cv (J/mol/K)",
+#                          "Cp (J/mol/K)",
+#                          "Entropy (J/mol/K)",
+#                          "ZPE (a.u.)",
+#                          "Thermal correction to U (a.u.)",
+#                          "Thermal correction to H (a.u.)",
+#                          "Thermal correction to G (a.u.)",
+#                          "EE + ZPE (a.u.)",
+#                          "EE + correction to U (a.u.)",
+#                          "EE + correction to H (a.u.)",
+#                          "EE + correction to G (a.u.)",
+#                          "Thermo scaler"])
+#         for mol in mols:
+#             writer.writerow([mol.name, mol.method_freq, mol.method_energy,
+#                              mol.energy, mol.cv, mol.cp, mol.s,
+#                              mol.zpe, mol.c_u, mol.c_h, mol.c_g,
+#                              mol.zpe+mol.energy, mol.u, mol.h, mol.g,
+#                              mol.scaler])
+
+import os
+import csv
+
+def ProjectSummarize(cwd=os.getcwd()):
+    def extract_mol_name(filename: str) -> str:
+        """
+        Extract molecule name from Gaussian log filename.
+
+        Examples:
+            name.log              -> name
+            name_freq.log         -> name
+            name-opt.log          -> name
+            name.sp.log           -> name
+        """
+        base = os.path.basename(filename)
+        base = os.path.splitext(base)[0]   # remove .log
+        return re.split(r"[_\-.]", base, maxsplit=1)[0]
+
+    def collect_logs_by_name(root_dir):
+        """
+        Return dict: {mol_name: full_log_path}
+        """
+        logs = {}
+
+        for root, _, files in os.walk(root_dir):
+            for f in files:
+                if f.endswith(".log"):
+                    name = extract_mol_name(f)
+                    logs[name] = os.path.join(root, f)
+
+        return logs
+
+    # Collect logs
+    energy_dir = os.path.join(cwd, DIR_ENERGY)
+    freq_dir   = os.path.join(cwd, DIR_FREQ)
+    opt_dir    = os.path.join(cwd, DIR_OPT)
+
+    energy_logs = collect_logs_by_name(energy_dir)
+    freq_logs   = collect_logs_by_name(freq_dir) if os.path.exists(freq_dir) else {}
+    opt_logs    = collect_logs_by_name(opt_dir)  if os.path.exists(opt_dir)  else {}
+
+    # Shermo output
+    shermo_output_dir = os.path.join(cwd, "ShermoOutput")
+    os.makedirs(shermo_output_dir, exist_ok=True)
+
+    mols = []
+
+    for name, energy_file in energy_logs.items():
+        print(f"\nNow reading molecule {name}")
+
         mol = MoleculeSummarize(name)
-        print("Getting precise single point energy calculation:")
+
+        print("Getting precise single point energy calculation")
         mol.getEnergy(energy_file)
 
-        print("Getting frequency calculation")
-        # try looking for freq computation in freq dir
-        found_in_freq_dir = False
-        try:
-            for freq_file in freq_files:
-                if os.path.basename(freq_file).split("_")[0] == name:
-                    mol.getFreq(freq_file)
-                    found_in_freq_dir = True
-                    if mol.runShermo(output_dir=shermo_output_dir) == 0: # if Shermo terminate successfullly
-                        mols.append(mol)
-        except UnboundLocalError:
-            print("No freq dir")
+        # Frequency priority: energy → freq → opt
+        freq_file = (
+            energy_logs.get(name) or
+            freq_logs.get(name) or
+            opt_logs.get(name)
+        )
 
-        # some tasks run freq calculation during opt
-        if not found_in_freq_dir:
-            for opt_file in opt_files:
-                if os.path.basename(opt_file).split(".")[0] == name:
-                    mol.getFreq(opt_file)
-                    if mol.runShermo(output_dir=shermo_output_dir) == 0:
-                        mols.append(mol)
-    # summarize in a .csv file
-    with open(os.path.join(shermo_output_dir, "summay.csv"), "w+", newline='') as f:
+        if freq_file is None:
+            print(f"⚠ No frequency found for {name}")
+            continue
+
+        print(f"Getting frequency from: {freq_file}")
+        mol.getFreqScalar(freq_file)
+
+        if mol.runShermo(output_dir=shermo_output_dir) == 0:
+            mols.append(mol)
+
+    # Write summary CSV
+    with open(os.path.join(shermo_output_dir, "summary.csv"), "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Name",
-                         "Method for freq",
-                         "Method for energy",
-                         "Electronic energy (a.u.)",
-                         "Cv (J/mol/K)",
-                         "Cp (J/mol/K)",
-                         "Entropy (J/mol/K)",
-                         "ZPE (a.u.)",
-                         "Thermal correction to U (a.u.)",
-                         "Thermal correction to H (a.u.)",
-                         "Thermal correction to G (a.u.)",
-                         "EE + ZPE (a.u.)",
-                         "EE + correction to U (a.u.)",
-                         "EE + correction to H (a.u.)",
-                         "EE + correction to G (a.u.)",
-                         "Thermo scaler"])
+        writer.writerow([
+            "Name", "Method for freq", "Method for energy",
+            "Electronic energy (a.u.)", "Cv (J/mol/K)", "Cp (J/mol/K)",
+            "Entropy (J/mol/K)", "ZPE (a.u.)",
+            "Thermal correction to U (a.u.)",
+            "Thermal correction to H (a.u.)",
+            "Thermal correction to G (a.u.)",
+            "EE + ZPE (a.u.)",
+            "EE + correction to U (a.u.)",
+            "EE + correction to H (a.u.)",
+            "EE + correction to G (a.u.)",
+            "Thermo scaler"
+        ])
+
         for mol in mols:
-            writer.writerow([mol.name, mol.method_freq, mol.method_energy,
-                             mol.energy, mol.cv, mol.cp, mol.s,
-                             mol.zpe, mol.c_u, mol.c_h, mol.c_g,
-                             mol.zpe+mol.energy, mol.u, mol.h, mol.g,
-                             mol.scaler])
+            writer.writerow([
+                mol.name, mol.method_freq, mol.method_energy,
+                mol.energy, mol.cv, mol.cp, mol.s,
+                mol.zpe, mol.c_u, mol.c_h, mol.c_g,
+                mol.zpe + mol.energy, mol.u, mol.h, mol.g,
+                mol.scaler
+            ])
+
+
 
 if __name__=="__main__":
     ProjectSummarize()
