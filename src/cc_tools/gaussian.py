@@ -58,32 +58,17 @@ class GaussianInput:
     def write(self, path: str | Path) -> None:
         Path(path).write_text(self.render())
 
-def molecule_from_log(
-    path: str | Path,
-    *,
-    name_suffix: str = "out",
-    allow_imaginary: bool = True,
-) -> Molecule:
+@dataclass
+class CalculationResult:
+    molecule: Molecule
+    success: bool
+    frequencies: np.ndarray | None = None
+
+def read_log(path: str | Path) -> CalculationResult:
+    """Read a Gaussian log file into a CalculationResult."""
     path = Path(path)
 
     data = cclib.io.ccopen(str(path)).parse()
-
-    if not data.metadata.get("success", False):
-        raise RuntimeError(
-            f"Gaussian did not terminate normally: {path}"
-        )
-
-    frequencies = getattr(data, "vibfreqs", None)
-
-    if (
-        frequencies is not None
-        and len(frequencies)
-        and frequencies[0] < 0
-        and not allow_imaginary
-    ):
-        raise RuntimeError(
-            f"Imaginary frequency found: {path}"
-        )
 
     symbols = [
         periodictable.elements[number].symbol
@@ -95,12 +80,28 @@ def molecule_from_log(
         dtype=float,
     )
 
-    return Molecule(
+    molecule = Molecule(
         symbols=symbols,
         coordinates=coordinates,
         charge=int(data.charge),
         multiplicity=int(data.mult),
-        name=f"{path.stem}_{name_suffix}",
+        name=path.stem,
+    )
+
+    frequencies = getattr(data, "vibfreqs", None)
+
+    if frequencies is not None:
+        frequencies = np.asarray(
+            frequencies,
+            dtype=float,
+        )
+
+    return CalculationResult(
+        molecule=molecule,
+        success=bool(
+            data.metadata.get("success", False)
+        ),
+        frequencies=frequencies,
     )
 
 def read_gjf(path: str | Path) -> Molecule:
@@ -141,3 +142,120 @@ def read_gjf(path: str | Path) -> Molecule:
         multiplicity=multiplicity,
         name=name,
     )
+
+def validate_opt_freq(
+    result: CalculationResult,
+    *,
+    require_minimum: bool = False,
+) -> None:
+    """Validate a Gaussian Opt/Freq calculation result."""
+    if not result.success:
+        raise RuntimeError(
+            "Gaussian calculation did not terminate normally"
+        )
+
+    if result.frequencies is None:
+        raise RuntimeError(
+            "Gaussian calculation contains no frequencies"
+        )
+
+    if (
+        require_minimum
+        and np.any(result.frequencies < 0)
+    ):
+        imaginary = result.frequencies[
+            result.frequencies < 0
+        ]
+
+        raise RuntimeError(
+            "Imaginary frequencies found: "
+            + ", ".join(f"{freq:.2f}" for freq in imaginary)
+        )
+    
+
+def prepare_single_point(
+    result: CalculationResult,
+    *,
+    route: str,
+    require_minimum: bool = False,
+    nprocs: int | None = None,
+    memory: str | None = None,
+    checkpoint: str | None = None,
+    additional_input: str = "",
+) -> GaussianInput:
+    """Prepare a Gaussian single-point input from an Opt/Freq result."""
+    validate_opt_freq(
+        result,
+        require_minimum=require_minimum,
+    )
+
+    return GaussianInput(
+        molecule=result.molecule,
+        route=route,
+        nprocs=nprocs,
+        memory=memory,
+        checkpoint=checkpoint,
+        additional_input=additional_input,
+    )
+
+def prepare_single_points(
+    input_dir: str | Path,
+    output_dir: str | Path,
+    *,
+    route: str,
+    require_minimum: bool = False,
+    nprocs: int | None = None,
+    memory: str | None = None,
+    checkpoint: bool = False,
+    additional_input: str = "",
+) -> list[Path]:
+    """Prepare Gaussian single-point inputs from all log files in a directory."""
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+
+    if not input_dir.is_dir():
+        raise NotADirectoryError(
+            f"Input directory does not exist: {input_dir}"
+        )
+
+    log_paths = sorted(input_dir.glob("*.log"))
+
+    if not log_paths:
+        raise FileNotFoundError(
+            f"No .log files found in: {input_dir}"
+        )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_paths: list[Path] = []
+
+    for log_path in log_paths:
+        result = read_log(log_path)
+
+        stem = log_path.stem
+        output_path = output_dir / f"{stem}.gjf"
+
+        checkpoint_name = (
+            f"{stem}.chk"
+            if checkpoint
+            else None
+        )
+
+        gaussian_input = prepare_single_point(
+            result,
+            route=route,
+            require_minimum=require_minimum,
+            nprocs=nprocs,
+            memory=memory,
+            checkpoint=checkpoint_name,
+            additional_input=additional_input,
+        )
+
+        gaussian_input.write(output_path)
+
+        output_paths.append(output_path)
+
+    return output_paths
