@@ -60,15 +60,19 @@ def prepare_gaussian_workflow(
 
     pbs_path = output_dir / "run.pbs"
 
-    pbs_path.write_text(
-        render_gaussian_pbs(
-            route_sp=route_sp,
-            nprocs=nprocs,
-            memory=memory,
-            require_minimum=require_minimum,
-        ),
-        encoding="utf-8",
+    pbs_script = render_gaussian_pbs(
+        route_sp=route_sp,
+        nprocs=nprocs,
+        memory=memory,
+        require_minimum=require_minimum,
     )
+
+    with pbs_path.open(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+    ) as f:
+        f.write(pbs_script)
 
     return pbs_path
 
