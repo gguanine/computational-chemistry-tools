@@ -109,8 +109,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     prepare_sp_parser.add_argument(
-        "--checkpoint",
-        help="Gaussian checkpoint file name.",
+    "--checkpoint",
+    action="store_true",
+    help="Generate a checkpoint file for each Gaussian input.",
     )
 
     prepare_sp_parser.set_defaults(

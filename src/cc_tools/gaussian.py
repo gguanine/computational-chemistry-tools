@@ -209,7 +209,6 @@ def prepare_single_points(
     checkpoint: bool = False,
     additional_input: str = "",
 ) -> list[Path]:
-    """Prepare Gaussian single-point inputs from all log files in a directory."""
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
 
@@ -230,7 +229,7 @@ def prepare_single_points(
         exist_ok=True,
     )
 
-    output_paths: list[Path] = []
+    output_paths = []
 
     for log_path in log_paths:
         result = read_log(log_path)
