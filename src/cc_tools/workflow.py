@@ -5,10 +5,13 @@ import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
+from dataclasses import dataclass
+import csv
 
 from .gaussian import GaussianInput
 from .molecule import Molecule
 from .xtb import optimize
+from .results import CalculationResult, read_output
 
 
 def prepare_gaussian_workflow(
@@ -233,3 +236,251 @@ run_gaussian_in_dir "$dir_energy"
 
 echo "=== Workflow completed ==="
 """
+
+
+@dataclass
+class WorkflowResult:
+    """Combined result from Opt/Freq and single-point calculations.
+
+    The Opt/Freq calculation provides thermochemical corrections.
+    The single-point calculation provides the final electronic energy.
+
+    All energies are in Hartree.
+    """
+
+    opt_freq: CalculationResult
+    single_point: CalculationResult
+
+    def __post_init__(self) -> None:
+        if not self.opt_freq.success:
+            raise ValueError(
+                "Opt/Freq calculation was not successful"
+            )
+
+        if not self.single_point.success:
+            raise ValueError(
+                "Single-point calculation was not successful"
+            )
+
+        if self.opt_freq.electronic_energy is None:
+            raise ValueError(
+                "Opt/Freq result contains no electronic energy"
+            )
+
+        if self.single_point.electronic_energy is None:
+            raise ValueError(
+                "Single-point result contains no electronic energy"
+            )
+
+    @property
+    def molecule(self) -> Molecule:
+        """Return the optimized molecule."""
+        return self.opt_freq.molecule
+
+    @property
+    def electronic_energy(self) -> float:
+        """Electronic energy from the high-level single-point calculation."""
+        energy = self.single_point.electronic_energy
+
+        assert energy is not None
+        return energy
+
+    @property
+    def zero_point_correction(self) -> float | None:
+        """Zero-point correction from the Opt/Freq calculation."""
+        return self.opt_freq.zero_point_correction
+
+    @property
+    def enthalpy_correction(self) -> float | None:
+        """Thermal enthalpy correction from the Opt/Freq calculation."""
+        return self.opt_freq.enthalpy_correction
+
+    @property
+    def free_energy_correction(self) -> float | None:
+        """Thermal Gibbs free-energy correction from the Opt/Freq calculation."""
+        return self.opt_freq.free_energy_correction
+
+    @property
+    def zero_point_energy(self) -> float | None:
+        """Composite zero-point corrected energy."""
+        correction = self.zero_point_correction
+
+        if correction is None:
+            return None
+
+        return self.electronic_energy + correction
+
+    @property
+    def enthalpy(self) -> float | None:
+        """Composite enthalpy."""
+        correction = self.enthalpy_correction
+
+        if correction is None:
+            return None
+
+        return self.electronic_energy + correction
+
+    @property
+    def free_energy(self) -> float | None:
+        """Composite Gibbs free energy."""
+        correction = self.free_energy_correction
+
+        if correction is None:
+            return None
+
+        return self.electronic_energy + correction
+
+    @property
+    def frequencies(self):
+        """Vibrational frequencies from the Opt/Freq calculation."""
+        return self.opt_freq.frequencies
+
+    @property
+    def is_minimum(self) -> bool | None:
+        """Whether the optimized structure is a local minimum."""
+        return self.opt_freq.is_minimum
+
+    @property
+    def temperature(self) -> float | None:
+        return self.opt_freq.temperature
+
+    @property
+    def pressure(self) -> float | None:
+        return self.opt_freq.pressure
+
+
+def collect_workflow_results(
+    opt_freq_dir: str | Path,
+    single_point_dir: str | Path,
+    *,
+    pattern: str = "*.log",
+) -> list[WorkflowResult]:
+    """Collect paired Opt/Freq and single-point results.
+
+    Files are paired by identical filenames.
+    """
+    opt_freq_dir = Path(opt_freq_dir)
+    single_point_dir = Path(single_point_dir)
+
+    results: list[WorkflowResult] = []
+
+    for opt_freq_path in sorted(opt_freq_dir.glob(pattern)):
+        single_point_path = (
+            single_point_dir / opt_freq_path.name
+        )
+
+        if not single_point_path.exists():
+            raise FileNotFoundError(
+                "Matching single-point output not found: "
+                f"{single_point_path}"
+            )
+
+        opt_freq = read_output(opt_freq_path)
+        single_point = read_output(single_point_path)
+
+        results.append(
+            WorkflowResult(
+                opt_freq=opt_freq,
+                single_point=single_point,
+            )
+        )
+
+    return results
+
+
+def workflow_result_to_dict(
+    result: WorkflowResult,
+) -> dict[str, object]:
+    """Convert a WorkflowResult to a flat dictionary."""
+    molecule = result.molecule
+
+    imaginary_frequencies = (
+        result.opt_freq.imaginary_frequencies
+    )
+
+    if imaginary_frequencies is None:
+        n_imaginary = None
+    else:
+        n_imaginary = len(imaginary_frequencies)
+
+    return {
+        "name": molecule.name,
+        "smiles": molecule.smiles,
+        "charge": molecule.charge,
+        "multiplicity": molecule.multiplicity,
+
+        # Calculation status
+        "opt_freq_success": result.opt_freq.success,
+        "optimization_converged": (
+            result.opt_freq.optimization_converged
+        ),
+        "single_point_success": result.single_point.success,
+        "is_minimum": result.is_minimum,
+        "n_imaginary": n_imaginary,
+
+        # Raw electronic energies
+        "opt_freq_electronic_energy_hartree": (
+            result.opt_freq.electronic_energy
+        ),
+        "single_point_electronic_energy_hartree": (
+            result.single_point.electronic_energy
+        ),
+
+        # Thermochemical corrections
+        "zero_point_correction_hartree": (
+            result.zero_point_correction
+        ),
+        "enthalpy_correction_hartree": (
+            result.enthalpy_correction
+        ),
+        "free_energy_correction_hartree": (
+            result.free_energy_correction
+        ),
+
+        # Composite results
+        "zero_point_energy_hartree": (
+            result.zero_point_energy
+        ),
+        "enthalpy_hartree": result.enthalpy,
+        "free_energy_hartree": result.free_energy,
+
+        # Thermochemistry conditions
+        "temperature_kelvin": result.temperature,
+        "pressure_atm": result.pressure,
+    }
+
+
+def write_workflow_csv(
+    results: Sequence[WorkflowResult],
+    path: str | Path,
+) -> None:
+    """Write workflow results to a CSV file."""
+    path = Path(path)
+
+    rows = [
+        workflow_result_to_dict(result)
+        for result in results
+    ]
+
+    if not rows:
+        raise ValueError(
+            "No workflow results to write"
+        )
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with path.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=list(rows[0]),
+        )
+
+        writer.writeheader()
+        writer.writerows(rows)

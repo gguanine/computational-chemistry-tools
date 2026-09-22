@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .gaussian import prepare_single_point, prepare_single_points, read_log
+from .gaussian import prepare_single_point, prepare_single_points
+from .results import read_output
 
 
 def _cmd_gaussian_prepare_sp(args: argparse.Namespace) -> None:
@@ -19,7 +20,7 @@ def _cmd_gaussian_prepare_sp(args: argparse.Namespace) -> None:
         )
         return
 
-    result = read_log(args.input)
+    result = read_output(args.input)
 
     checkpoint_name = (
         args.output.with_suffix(".chk").name

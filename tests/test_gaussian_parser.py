@@ -23,7 +23,7 @@ def make_molecule() -> Molecule:
 def test_parse_radical_normal_gaussian_log():
     path = DATA_DIR / "radical_opt_freq_normal.log"
 
-    mol = read_log(path).molecule
+    mol = read_output(path).molecule
 
     assert mol is not None
     assert len(mol.symbols) > 0
@@ -120,7 +120,7 @@ def test_prepare_single_points(
     )
 
     monkeypatch.setattr(
-        "cc_tools.gaussian.read_log",
+        "cc_tools.gaussian.read_output",
         lambda path: result,
     )
 

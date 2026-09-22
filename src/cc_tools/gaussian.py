@@ -6,6 +6,7 @@ import numpy as np
 import periodictable
 
 from .molecule import Molecule
+from .results import CalculationResult, read_output
 
 
 @dataclass
@@ -58,51 +59,46 @@ class GaussianInput:
     def write(self, path: str | Path) -> None:
         Path(path).write_text(self.render())
 
-@dataclass
-class CalculationResult:
-    molecule: Molecule
-    success: bool
-    frequencies: np.ndarray | None = None
 
-def read_log(path: str | Path) -> CalculationResult:
-    """Read a Gaussian log file into a CalculationResult."""
-    path = Path(path)
+# def read_output(path: str | Path) -> CalculationResult:
+#     """Read a Gaussian log file into a CalculationResult."""
+#     path = Path(path)
 
-    data = cclib.io.ccopen(str(path)).parse()
+#     data = cclib.io.ccopen(str(path)).parse()
 
-    symbols = [
-        periodictable.elements[number].symbol
-        for number in data.atomnos
-    ]
+#     symbols = [
+#         periodictable.elements[number].symbol
+#         for number in data.atomnos
+#     ]
 
-    coordinates = np.asarray(
-        data.atomcoords[-1],
-        dtype=float,
-    )
+#     coordinates = np.asarray(
+#         data.atomcoords[-1],
+#         dtype=float,
+#     )
 
-    molecule = Molecule(
-        symbols=symbols,
-        coordinates=coordinates,
-        charge=int(data.charge),
-        multiplicity=int(data.mult),
-        name=path.stem,
-    )
+#     molecule = Molecule(
+#         symbols=symbols,
+#         coordinates=coordinates,
+#         charge=int(data.charge),
+#         multiplicity=int(data.mult),
+#         name=path.stem,
+#     )
 
-    frequencies = getattr(data, "vibfreqs", None)
+#     frequencies = getattr(data, "vibfreqs", None)
 
-    if frequencies is not None:
-        frequencies = np.asarray(
-            frequencies,
-            dtype=float,
-        )
+#     if frequencies is not None:
+#         frequencies = np.asarray(
+#             frequencies,
+#             dtype=float,
+#         )
 
-    return CalculationResult(
-        molecule=molecule,
-        success=bool(
-            data.metadata.get("success", False)
-        ),
-        frequencies=frequencies,
-    )
+#     return CalculationResult(
+#         molecule=molecule,
+#         success=bool(
+#             data.metadata.get("success", False)
+#         ),
+#         frequencies=frequencies,
+#     )
 
 def read_gjf(path: str | Path) -> Molecule:
     text = Path(path).read_text().strip()
@@ -232,7 +228,7 @@ def prepare_single_points(
     output_paths = []
 
     for log_path in log_paths:
-        result = read_log(log_path)
+        result = read_output(log_path)
 
         stem = log_path.stem
         output_path = output_dir / f"{stem}.gjf"
